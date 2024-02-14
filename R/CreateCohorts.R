@@ -13,11 +13,13 @@ createCohorts <- function(
     show_col_types = FALSE
   )
 
+  cohortTableNames <- CohortGenerator::getCohortTableNames(cohortTable)
+
   cohortsGenerated <- CohortGenerator::generateCohortSet(
     connectionDetails = connectionDetails,
     cdmDatabaseSchema = cdmDatabaseSchema,
     cohortDatabaseSchema = cohortDatabaseSchema,
-    cohortTableNames = CohortGenerator::getCohortTableNames(cohortTable),
+    cohortTableNames = cohortTableNames,
     cohortDefinitionSet = cohortDefinitionSet,
     incremental = TRUE,
     incrementalFolder = file.path(outputFolder, "incremental")
