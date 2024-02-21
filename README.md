@@ -12,7 +12,7 @@ Phenotype Phebruary 2024
 - Study end date: **Feb 29, 2024**
 - Protocol: **https://forums.ohdsi.org/t/ohdsi-phenotype-phebruary-2024**
 - Publications: **TBD**
-- Results explorer: **TDB**
+- Results explorer: **https://results.ohdsi.org/app/16_PhenotypePhebAlzh**
 
 How to run
 ==========
