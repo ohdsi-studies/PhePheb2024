@@ -17,6 +17,9 @@ runCohortDiagnostics <- function(
   cohortDefinitionSet <- readr::read_csv(
     file = system.file("settings", "CohortsToCreate.csv", package = "PhePheb2024"),
     show_col_types = FALSE
+  ) %>%
+  dplyr::filter(
+    cohortId != 15476
   )
 
   CohortDiagnostics::executeDiagnostics(
