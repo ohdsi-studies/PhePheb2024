@@ -4925,6 +4925,1633 @@ DROP TABLE #Codesets;
 }","
 
 ",FALSE,TRUE
+15489,15489,[PhePheb] Alzheimers disease per Riedel 2022,"CREATE TABLE #Codesets (
+  codeset_id int NOT NULL,
+  concept_id bigint NOT NULL
+)
+;
+
+INSERT INTO #Codesets (codeset_id, concept_id)
+SELECT 0 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+( 
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (45533052,45557146,45561994)
+
+) I
+) C UNION ALL 
+SELECT 1 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+( 
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (4218017,4220313)
+UNION  select c.concept_id
+  from @vocabulary_database_schema.CONCEPT c
+  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
+  and ca.ancestor_concept_id in (4218017,4220313)
+  and c.invalid_reason is null
+
+) I
+) C UNION ALL 
+SELECT 2 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+( 
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (9201)
+UNION  select c.concept_id
+  from @vocabulary_database_schema.CONCEPT c
+  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
+  and ca.ancestor_concept_id in (9201)
+  and c.invalid_reason is null
+
+) I
+) C UNION ALL 
+SELECT 3 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+( 
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (9202)
+UNION  select c.concept_id
+  from @vocabulary_database_schema.CONCEPT c
+  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
+  and ca.ancestor_concept_id in (9202)
+  and c.invalid_reason is null
+
+) I
+) C UNION ALL 
+SELECT 4 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+( 
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (9201,9202)
+UNION  select c.concept_id
+  from @vocabulary_database_schema.CONCEPT c
+  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
+  and ca.ancestor_concept_id in (9201,9202)
+  and c.invalid_reason is null
+
+) I
+) C;
+
+UPDATE STATISTICS #Codesets;
+
+
+SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, visit_occurrence_id
+INTO #qualified_events
+FROM 
+(
+  select pe.event_id, pe.person_id, pe.start_date, pe.end_date, pe.op_start_date, pe.op_end_date, row_number() over (partition by pe.person_id order by pe.start_date ASC) as ordinal, cast(pe.visit_occurrence_id as bigint) as visit_occurrence_id
+  FROM (-- Begin Primary Events
+select P.ordinal as event_id, P.person_id, P.start_date, P.end_date, op_start_date, op_end_date, cast(P.visit_occurrence_id as bigint) as visit_occurrence_id
+FROM
+(
+  select E.person_id, E.start_date, E.end_date,
+         row_number() OVER (PARTITION BY E.person_id ORDER BY E.sort_date ASC, E.event_id) ordinal,
+         OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date, cast(E.visit_occurrence_id as bigint) as visit_occurrence_id
+  FROM 
+  (
+  -- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 1)
+) C
+
+
+-- End Condition Occurrence Criteria
+
+UNION ALL
+-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cns on (co.condition_source_concept_id = cns.concept_id and cns.codeset_id = 0)
+) C
+
+
+-- End Condition Occurrence Criteria
+
+  ) E
+	JOIN @cdm_database_schema.observation_period OP on E.person_id = OP.person_id and E.start_date >=  OP.observation_period_start_date and E.start_date <= op.observation_period_end_date
+  WHERE DATEADD(day,365,OP.OBSERVATION_PERIOD_START_DATE) <= E.START_DATE AND DATEADD(day,0,E.START_DATE) <= OP.OBSERVATION_PERIOD_END_DATE
+) P
+
+-- End Primary Events
+) pe
+  
+) QE
+
+;
+
+--- Inclusion Rule Inserts
+
+select 0 as inclusion_rule_id, person_id, event_id
+INTO #Inclusion_0
+FROM 
+(
+  select pe.person_id, pe.event_id
+  FROM #qualified_events pe
+  
+JOIN (
+-- Begin Criteria Group
+select 0 as index_id, person_id, event_id
+FROM
+(
+  select E.person_id, E.event_id 
+  FROM #qualified_events E
+  INNER JOIN
+  (
+    -- Begin Demographic Criteria
+SELECT 0 as index_id, e.person_id, e.event_id
+FROM #qualified_events E
+JOIN @cdm_database_schema.PERSON P ON P.PERSON_ID = E.PERSON_ID
+WHERE YEAR(E.start_date) - P.year_of_birth >= 50
+GROUP BY e.person_id, e.event_id
+-- End Demographic Criteria
+
+  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
+  GROUP BY E.person_id, E.event_id
+  HAVING COUNT(index_id) > 0
+) G
+-- End Criteria Group
+) AC on AC.person_id = pe.person_id AND AC.event_id = pe.event_id
+) Results
+;
+
+select 1 as inclusion_rule_id, person_id, event_id
+INTO #Inclusion_1
+FROM 
+(
+  select pe.person_id, pe.event_id
+  FROM #qualified_events pe
+  
+JOIN (
+-- Begin Criteria Group
+select 0 as index_id, person_id, event_id
+FROM
+(
+  select E.person_id, E.event_id 
+  FROM #qualified_events E
+  INNER JOIN
+  (
+    -- Begin Correlated Criteria
+select 0 as index_id, p.person_id, p.event_id
+from #qualified_events p
+LEFT JOIN (
+SELECT p.person_id, p.event_id 
+FROM #qualified_events P
+JOIN (
+  -- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 1)
+) C
+
+
+-- End Condition Occurrence Criteria
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= DATEADD(day,-365,P.START_DATE) AND A.START_DATE <= DATEADD(day,-1,P.START_DATE) ) cc on p.person_id = cc.person_id and p.event_id = cc.event_id
+GROUP BY p.person_id, p.event_id
+HAVING COUNT(cc.event_id) = 0
+-- End Correlated Criteria
+
+UNION ALL
+-- Begin Correlated Criteria
+select 1 as index_id, p.person_id, p.event_id
+from #qualified_events p
+LEFT JOIN (
+SELECT p.person_id, p.event_id 
+FROM #qualified_events P
+JOIN (
+  -- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cns on (co.condition_source_concept_id = cns.concept_id and cns.codeset_id = 0)
+) C
+
+
+-- End Condition Occurrence Criteria
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= DATEADD(day,-365,P.START_DATE) AND A.START_DATE <= DATEADD(day,-1,P.START_DATE) ) cc on p.person_id = cc.person_id and p.event_id = cc.event_id
+GROUP BY p.person_id, p.event_id
+HAVING COUNT(cc.event_id) = 0
+-- End Correlated Criteria
+
+  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
+  GROUP BY E.person_id, E.event_id
+  HAVING COUNT(index_id) = 2
+) G
+-- End Criteria Group
+) AC on AC.person_id = pe.person_id AND AC.event_id = pe.event_id
+) Results
+;
+
+select 2 as inclusion_rule_id, person_id, event_id
+INTO #Inclusion_2
+FROM 
+(
+  select pe.person_id, pe.event_id
+  FROM #qualified_events pe
+  
+JOIN (
+-- Begin Criteria Group
+select 0 as index_id, person_id, event_id
+FROM
+(
+  select E.person_id, E.event_id 
+  FROM #qualified_events E
+  INNER JOIN
+  (
+    -- Begin Correlated Criteria
+select 0 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM #qualified_events P
+JOIN (
+  -- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 2)
+) C
+
+
+-- End Visit Occurrence Criteria
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+UNION ALL
+-- Begin Correlated Criteria
+select 1 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM #qualified_events P
+JOIN (
+  -- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.provider_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
+) C
+LEFT JOIN @cdm_database_schema.PROVIDER PR on C.provider_id = PR.provider_id
+WHERE PR.specialty_concept_id in (38003663,38004458,38003893,43125860,38003981,38003983,38003985,38003986,38003987,903251,38003994,38003995,38003996,38003997,3193668,4075506,38004058,3194692,4205969,44777725,44777781,3197373,4207073,800946,45756788,45756834,33005)
+-- End Visit Occurrence Criteria
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+UNION ALL
+-- Begin Correlated Criteria
+select 2 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM #qualified_events P
+JOIN (
+  select PE.person_id, PE.event_id, PE.start_date, PE.end_date, PE.visit_occurrence_id, PE.sort_date FROM (
+-- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
+) C
+
+
+-- End Visit Occurrence Criteria
+
+) PE
+JOIN (
+-- Begin Criteria Group
+select 0 as index_id, person_id, event_id
+FROM
+(
+  select E.person_id, E.event_id 
+  FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
+) C
+
+
+-- End Visit Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) E
+  INNER JOIN
+  (
+    -- Begin Correlated Criteria
+select 0 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
+) C
+
+
+-- End Visit Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) P
+JOIN (
+  select PE.person_id, PE.event_id, PE.start_date, PE.end_date, PE.visit_occurrence_id, PE.sort_date FROM (
+-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 1)
+) C
+
+
+-- End Condition Occurrence Criteria
+
+) PE
+JOIN (
+-- Begin Criteria Group
+select 0 as index_id, person_id, event_id
+FROM
+(
+  select E.person_id, E.event_id 
+  FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 1)
+) C
+
+
+-- End Condition Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) E
+  INNER JOIN
+  (
+    -- Begin Correlated Criteria
+select 0 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 1)
+) C
+
+
+-- End Condition Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) P
+JOIN (
+  -- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 4)
+) C
+
+
+-- End Visit Occurrence Criteria
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
+  GROUP BY E.person_id, E.event_id
+  HAVING COUNT(index_id) = 1
+) G
+-- End Criteria Group
+) AC on AC.person_id = pe.person_id and AC.event_id = pe.event_id
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= DATEADD(day,1,P.START_DATE) AND A.START_DATE <= DATEADD(day,183,P.START_DATE) ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+UNION ALL
+-- Begin Correlated Criteria
+select 1 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
+) C
+
+
+-- End Visit Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) P
+JOIN (
+  select PE.person_id, PE.event_id, PE.start_date, PE.end_date, PE.visit_occurrence_id, PE.sort_date FROM (
+-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cns on (co.condition_source_concept_id = cns.concept_id and cns.codeset_id = 0)
+) C
+
+
+-- End Condition Occurrence Criteria
+
+) PE
+JOIN (
+-- Begin Criteria Group
+select 0 as index_id, person_id, event_id
+FROM
+(
+  select E.person_id, E.event_id 
+  FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cns on (co.condition_source_concept_id = cns.concept_id and cns.codeset_id = 0)
+) C
+
+
+-- End Condition Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) E
+  INNER JOIN
+  (
+    -- Begin Correlated Criteria
+select 0 as index_id, cc.person_id, cc.event_id
+from (SELECT p.person_id, p.event_id 
+FROM (SELECT Q.person_id, Q.event_id, Q.start_date, Q.end_date, Q.visit_occurrence_id, OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date
+FROM (-- Begin Condition Occurrence Criteria
+SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
+  C.visit_occurrence_id, C.start_date as sort_date
+FROM 
+(
+  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
+  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
+  JOIN #Codesets cns on (co.condition_source_concept_id = cns.concept_id and cns.codeset_id = 0)
+) C
+
+
+-- End Condition Occurrence Criteria
+) Q
+JOIN @cdm_database_schema.OBSERVATION_PERIOD OP on Q.person_id = OP.person_id 
+  and OP.observation_period_start_date <= Q.start_date and OP.observation_period_end_date >= Q.start_date
+) P
+JOIN (
+  -- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
+(
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 4)
+) C
+
+
+-- End Visit Occurrence Criteria
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
+  GROUP BY E.person_id, E.event_id
+  HAVING COUNT(index_id) = 1
+) G
+-- End Criteria Group
+) AC on AC.person_id = pe.person_id and AC.event_id = pe.event_id
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= DATEADD(day,1,P.START_DATE) AND A.START_DATE <= DATEADD(day,183,P.START_DATE) ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
+  GROUP BY E.person_id, E.event_id
+  HAVING COUNT(index_id) > 0
+) G
+-- End Criteria Group
+) AC on AC.person_id = pe.person_id and AC.event_id = pe.event_id
+
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
+GROUP BY cc.person_id, cc.event_id
+HAVING COUNT(cc.event_id) >= 1
+-- End Correlated Criteria
+
+  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
+  GROUP BY E.person_id, E.event_id
+  HAVING COUNT(index_id) > 0
+) G
+-- End Criteria Group
+) AC on AC.person_id = pe.person_id AND AC.event_id = pe.event_id
+) Results
+;
+
+SELECT inclusion_rule_id, person_id, event_id
+INTO #inclusion_events
+FROM (select inclusion_rule_id, person_id, event_id from #Inclusion_0
+UNION ALL
+select inclusion_rule_id, person_id, event_id from #Inclusion_1
+UNION ALL
+select inclusion_rule_id, person_id, event_id from #Inclusion_2) I;
+TRUNCATE TABLE #Inclusion_0;
+DROP TABLE #Inclusion_0;
+
+TRUNCATE TABLE #Inclusion_1;
+DROP TABLE #Inclusion_1;
+
+TRUNCATE TABLE #Inclusion_2;
+DROP TABLE #Inclusion_2;
+
+
+select event_id, person_id, start_date, end_date, op_start_date, op_end_date
+into #included_events
+FROM (
+  SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, row_number() over (partition by person_id order by start_date ASC) as ordinal
+  from
+  (
+    select Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date, SUM(coalesce(POWER(cast(2 as bigint), I.inclusion_rule_id), 0)) as inclusion_rule_mask
+    from #qualified_events Q
+    LEFT JOIN #inclusion_events I on I.person_id = Q.person_id and I.event_id = Q.event_id
+    GROUP BY Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date
+  ) MG -- matching groups
+
+  -- the matching group with all bits set ( POWER(2,# of inclusion rules) - 1 = inclusion_rule_mask
+  WHERE (MG.inclusion_rule_mask = POWER(cast(2 as bigint),3)-1)
+
+) Results
+WHERE Results.ordinal = 1
+;
+
+-- date offset strategy
+
+select event_id, person_id, 
+  case when DATEADD(day,1460,start_date) > op_end_date then op_end_date else DATEADD(day,1460,start_date) end as end_date
+INTO #strategy_ends
+from #included_events;
+
+
+-- generate cohort periods into #final_cohort
+select person_id, start_date, end_date
+INTO #cohort_rows
+from ( -- first_ends
+	select F.person_id, F.start_date, F.end_date
+	FROM (
+	  select I.event_id, I.person_id, I.start_date, CE.end_date, row_number() over (partition by I.person_id, I.event_id order by CE.end_date) as ordinal
+	  from #included_events I
+	  join ( -- cohort_ends
+-- cohort exit dates
+-- End Date Strategy
+SELECT event_id, person_id, end_date from #strategy_ends
+
+    ) CE on I.event_id = CE.event_id and I.person_id = CE.person_id and CE.end_date >= I.start_date
+	) F
+	WHERE F.ordinal = 1
+) FE;
+
+select person_id, min(start_date) as start_date, end_date
+into #final_cohort
+from ( --cteEnds
+	SELECT
+		 c.person_id
+		, c.start_date
+		, MIN(ed.end_date) AS end_date
+	FROM #cohort_rows c
+	JOIN ( -- cteEndDates
+    SELECT
+      person_id
+      , DATEADD(day,-1 * 0, event_date)  as end_date
+    FROM
+    (
+      SELECT
+        person_id
+        , event_date
+        , event_type
+        , SUM(event_type) OVER (PARTITION BY person_id ORDER BY event_date, event_type ROWS UNBOUNDED PRECEDING) AS interval_status
+      FROM
+      (
+        SELECT
+          person_id
+          , start_date AS event_date
+          , -1 AS event_type
+        FROM #cohort_rows
+
+        UNION ALL
+
+
+        SELECT
+          person_id
+          , DATEADD(day,0,end_date) as end_date
+          , 1 AS event_type
+        FROM #cohort_rows
+      ) RAWDATA
+    ) e
+    WHERE interval_status = 0
+  ) ed ON c.person_id = ed.person_id AND ed.end_date >= c.start_date
+	GROUP BY c.person_id, c.start_date
+) e
+group by person_id, end_date
+;
+
+DELETE FROM @target_database_schema.@target_cohort_table where cohort_definition_id = @target_cohort_id;
+INSERT INTO @target_database_schema.@target_cohort_table (cohort_definition_id, subject_id, cohort_start_date, cohort_end_date)
+select @target_cohort_id as cohort_definition_id, person_id, start_date, end_date 
+FROM #final_cohort CO
+;
+
+
+
+
+TRUNCATE TABLE #strategy_ends;
+DROP TABLE #strategy_ends;
+
+
+TRUNCATE TABLE #cohort_rows;
+DROP TABLE #cohort_rows;
+
+TRUNCATE TABLE #final_cohort;
+DROP TABLE #final_cohort;
+
+TRUNCATE TABLE #inclusion_events;
+DROP TABLE #inclusion_events;
+
+TRUNCATE TABLE #qualified_events;
+DROP TABLE #qualified_events;
+
+TRUNCATE TABLE #included_events;
+DROP TABLE #included_events;
+
+TRUNCATE TABLE #Codesets;
+DROP TABLE #Codesets;
+","{
+	""cdmVersionRange"" : "">=5.0.0"",
+	""PrimaryCriteria"" : {
+		""CriteriaList"" : [
+			{
+				""ConditionOccurrence"" : {
+					""CodesetId"" : 1
+				}
+			},
+			{
+				""ConditionOccurrence"" : {
+					""ConditionSourceConcept"" : 0
+				}
+			}
+		],
+		""ObservationWindow"" : {
+			""PriorDays"" : 365,
+			""PostDays"" : 0
+		},
+		""PrimaryCriteriaLimit"" : {
+			""Type"" : ""All""
+		}
+	},
+	""ConceptSets"" : [
+		{
+			""id"" : 0,
+			""name"" : ""ICD10 F00 Dementia in Alzheimer's disease NOT mapped to SNOMED (too broad)"",
+			""expression"" : {
+				""items"" : [
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 45533052,
+							""CONCEPT_NAME"" : ""Dementia in Alzheimer disease"",
+							""STANDARD_CONCEPT"" : ""N"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Non-Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""F00"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""ICD10"",
+							""CONCEPT_CLASS_ID"" : ""ICD10 Hierarchy""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : false,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 45557146,
+							""CONCEPT_NAME"" : ""Dementia in Alzheimer disease, atypical or mixed type"",
+							""STANDARD_CONCEPT"" : ""N"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Non-Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""F00.2"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""ICD10"",
+							""CONCEPT_CLASS_ID"" : ""ICD10 code""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : false,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 45561994,
+							""CONCEPT_NAME"" : ""Dementia in Alzheimer disease, unspecified"",
+							""STANDARD_CONCEPT"" : ""N"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Non-Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""F00.9"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""ICD10"",
+							""CONCEPT_CLASS_ID"" : ""ICD10 code""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : false,
+						""includeMapped"" : false
+					}
+				]
+			}
+		},
+		{
+			""id"" : 1,
+			""name"" : ""ICD10 F00 Dementia in Alzheimer's disease mapped to SNOMED"",
+			""expression"" : {
+				""items"" : [
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4218017,
+							""CONCEPT_NAME"" : ""Primary degenerative dementia of the Alzheimer type, presenile onset"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""416780008"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4220313,
+							""CONCEPT_NAME"" : ""Primary degenerative dementia of the Alzheimer type, senile onset"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""416975007"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					}
+				]
+			}
+		},
+		{
+			""id"" : 2,
+			""name"" : ""Inpatient Visit"",
+			""expression"" : {
+				""items"" : [
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 9201,
+							""CONCEPT_NAME"" : ""Inpatient Visit"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""IP"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					}
+				]
+			}
+		},
+		{
+			""id"" : 3,
+			""name"" : ""Outpatient Visit"",
+			""expression"" : {
+				""items"" : [
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 9202,
+							""CONCEPT_NAME"" : ""Outpatient Visit"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""OP"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					}
+				]
+			}
+		},
+		{
+			""id"" : 4,
+			""name"" : ""Inpatient or Outpatient Visit"",
+			""expression"" : {
+				""items"" : [
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 9201,
+							""CONCEPT_NAME"" : ""Inpatient Visit"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""IP"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 9202,
+							""CONCEPT_NAME"" : ""Outpatient Visit"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""OP"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					}
+				]
+			}
+		}
+	],
+	""QualifiedLimit"" : {
+		""Type"" : ""First""
+	},
+	""ExpressionLimit"" : {
+		""Type"" : ""First""
+	},
+	""InclusionRules"" : [
+		{
+			""name"" : ""Age >= 50"",
+			""expression"" : {
+				""Type"" : ""ANY"",
+				""CriteriaList"" : [],
+				""DemographicCriteriaList"" : [
+					{
+						""Age"" : {
+							""Value"" : 50,
+							""Op"" : ""gte""
+						}
+					}
+				],
+				""Groups"" : []
+			}
+		},
+		{
+			""name"" : ""No dx within a year prior"",
+			""expression"" : {
+				""Type"" : ""ALL"",
+				""CriteriaList"" : [
+					{
+						""Criteria"" : {
+							""ConditionOccurrence"" : {
+								""CodesetId"" : 1
+							}
+						},
+						""StartWindow"" : {
+							""Start"" : {
+								""Days"" : 365,
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Days"" : 1,
+								""Coeff"" : -1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : false
+						},
+						""RestrictVisit"" : false,
+						""IgnoreObservationPeriod"" : false,
+						""Occurrence"" : {
+							""Type"" : 0,
+							""Count"" : 0,
+							""IsDistinct"" : false
+						}
+					},
+					{
+						""Criteria"" : {
+							""ConditionOccurrence"" : {
+								""ConditionSourceConcept"" : 0
+							}
+						},
+						""StartWindow"" : {
+							""Start"" : {
+								""Days"" : 365,
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Days"" : 1,
+								""Coeff"" : -1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : false
+						},
+						""RestrictVisit"" : false,
+						""IgnoreObservationPeriod"" : false,
+						""Occurrence"" : {
+							""Type"" : 0,
+							""Count"" : 0,
+							""IsDistinct"" : false
+						}
+					}
+				],
+				""DemographicCriteriaList"" : [],
+				""Groups"" : []
+			}
+		},
+		{
+			""name"" : ""Additional criteria for index event (IP dx OR OP dx by neurologist OR OP + IP) "",
+			""expression"" : {
+				""Type"" : ""ANY"",
+				""CriteriaList"" : [
+					{
+						""Criteria"" : {
+							""VisitOccurrence"" : {
+								""CodesetId"" : 2,
+								""VisitTypeExclude"" : false
+							}
+						},
+						""StartWindow"" : {
+							""Start"" : {
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Days"" : 0,
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : false
+						},
+						""EndWindow"" : {
+							""Start"" : {
+								""Days"" : 0,
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : true
+						},
+						""RestrictVisit"" : false,
+						""IgnoreObservationPeriod"" : false,
+						""Occurrence"" : {
+							""Type"" : 2,
+							""Count"" : 1,
+							""IsDistinct"" : false
+						}
+					},
+					{
+						""Criteria"" : {
+							""VisitOccurrence"" : {
+								""CodesetId"" : 3,
+								""VisitTypeExclude"" : false,
+								""ProviderSpecialty"" : [
+									{
+										""CONCEPT_ID"" : 38003663,
+										""CONCEPT_NAME"" : ""Neurology Chiropractor"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""111NN0400X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38004458,
+										""CONCEPT_NAME"" : ""Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""13"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""Medicare Specialty"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003893,
+										""CONCEPT_NAME"" : ""Allopathic & Osteopathic Physicians, Neurological Surgery"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""207T00000X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 43125860,
+										""CONCEPT_NAME"" : ""Behavioral Neurology and Neuropsychiatry"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084B0040X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003981,
+										""CONCEPT_NAME"" : ""Allopathic & Osteopathic Physicians, Psychiatry & Neurology, Diagnostic Neuroimaging"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084D0003X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003983,
+										""CONCEPT_NAME"" : ""Hospice and Palliative Psychiatry or Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084H0002X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003985,
+										""CONCEPT_NAME"" : ""Allopathic & Osteopathic Physicians, Psychiatry & Neurology, Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084N0400X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003986,
+										""CONCEPT_NAME"" : ""Allopathic & Osteopathic Physicians, Psychiatry & Neurology, Neurology with Special Qualifications in Child Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084N0402X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003987,
+										""CONCEPT_NAME"" : ""Allopathic & Osteopathic Physicians, Psychiatry & Neurology, Clinical Neurophysiology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084N0600X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 903251,
+										""CONCEPT_NAME"" : ""Brain Injury Psychiatry or Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084P0301X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003994,
+										""CONCEPT_NAME"" : ""Pain Psychiatry or Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084P2900X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003995,
+										""CONCEPT_NAME"" : ""Sports Psychiatry or Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084S0010X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003996,
+										""CONCEPT_NAME"" : ""Sleep Psychiatry or Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084S0012X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38003997,
+										""CONCEPT_NAME"" : ""Allopathic & Osteopathic Physicians, Psychiatry & Neurology, Vascular Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2084V0102X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 3193668,
+										""CONCEPT_NAME"" : ""Neurology nurse"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""224550000"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""Nebraska Lexicon"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 4075506,
+										""CONCEPT_NAME"" : ""Neurology nurse"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""224550000"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""SNOMED"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 38004058,
+										""CONCEPT_NAME"" : ""Physical Neurology Therapist"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""2251N0400X"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""NUCC"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 3194692,
+										""CONCEPT_NAME"" : ""Paediatric neurologist"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""309334002"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""Nebraska Lexicon"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 4205969,
+										""CONCEPT_NAME"" : ""Pediatric neurologist"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""309334002"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""SNOMED"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 44777725,
+										""CONCEPT_NAME"" : ""Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""400"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""HES Specialty"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 44777781,
+										""CONCEPT_NAME"" : ""Paediatric neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""421"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""HES Specialty"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 3197373,
+										""CONCEPT_NAME"" : ""Neurologist"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""56397003"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""Nebraska Lexicon"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 4207073,
+										""CONCEPT_NAME"" : ""Neurologist"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""56397003"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""SNOMED"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 800946,
+										""CONCEPT_NAME"" : ""Neurology mips specialty set"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""G4015"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""HCPCS"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 45756788,
+										""CONCEPT_NAME"" : ""Neurology with Special Qualification in Child Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""OMOP4821955"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""ABMS"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 45756834,
+										""CONCEPT_NAME"" : ""Vascular Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""OMOP4822007"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""ABMS"",
+										""CONCEPT_CLASS_ID"" : null
+									},
+									{
+										""CONCEPT_ID"" : 33005,
+										""CONCEPT_NAME"" : ""Psychiatry or Neurology"",
+										""STANDARD_CONCEPT"" : null,
+										""STANDARD_CONCEPT_CAPTION"" : ""Unknown"",
+										""INVALID_REASON"" : null,
+										""INVALID_REASON_CAPTION"" : ""Unknown"",
+										""CONCEPT_CODE"" : ""OMOP5117448"",
+										""DOMAIN_ID"" : ""Provider"",
+										""VOCABULARY_ID"" : ""Provider"",
+										""CONCEPT_CLASS_ID"" : null
+									}
+								]
+							}
+						},
+						""StartWindow"" : {
+							""Start"" : {
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Days"" : 0,
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : false
+						},
+						""EndWindow"" : {
+							""Start"" : {
+								""Days"" : 0,
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : true
+						},
+						""RestrictVisit"" : false,
+						""IgnoreObservationPeriod"" : false,
+						""Occurrence"" : {
+							""Type"" : 2,
+							""Count"" : 1,
+							""IsDistinct"" : false
+						}
+					},
+					{
+						""Criteria"" : {
+							""VisitOccurrence"" : {
+								""CorrelatedCriteria"" : {
+									""Type"" : ""ANY"",
+									""CriteriaList"" : [
+										{
+											""Criteria"" : {
+												""ConditionOccurrence"" : {
+													""CorrelatedCriteria"" : {
+														""Type"" : ""ALL"",
+														""CriteriaList"" : [
+															{
+																""Criteria"" : {
+																	""VisitOccurrence"" : {
+																		""CodesetId"" : 4,
+																		""VisitTypeExclude"" : false
+																	}
+																},
+																""StartWindow"" : {
+																	""Start"" : {
+																		""Coeff"" : -1
+																	},
+																	""End"" : {
+																		""Days"" : 0,
+																		""Coeff"" : 1
+																	},
+																	""UseIndexEnd"" : false,
+																	""UseEventEnd"" : false
+																},
+																""EndWindow"" : {
+																	""Start"" : {
+																		""Days"" : 0,
+																		""Coeff"" : -1
+																	},
+																	""End"" : {
+																		""Coeff"" : 1
+																	},
+																	""UseIndexEnd"" : false,
+																	""UseEventEnd"" : true
+																},
+																""RestrictVisit"" : false,
+																""IgnoreObservationPeriod"" : false,
+																""Occurrence"" : {
+																	""Type"" : 2,
+																	""Count"" : 1,
+																	""IsDistinct"" : false
+																}
+															}
+														],
+														""DemographicCriteriaList"" : [],
+														""Groups"" : []
+													},
+													""CodesetId"" : 1
+												}
+											},
+											""StartWindow"" : {
+												""Start"" : {
+													""Days"" : 1,
+													""Coeff"" : 1
+												},
+												""End"" : {
+													""Days"" : 183,
+													""Coeff"" : 1
+												},
+												""UseIndexEnd"" : false,
+												""UseEventEnd"" : false
+											},
+											""RestrictVisit"" : false,
+											""IgnoreObservationPeriod"" : false,
+											""Occurrence"" : {
+												""Type"" : 2,
+												""Count"" : 1,
+												""IsDistinct"" : false
+											}
+										},
+										{
+											""Criteria"" : {
+												""ConditionOccurrence"" : {
+													""CorrelatedCriteria"" : {
+														""Type"" : ""ALL"",
+														""CriteriaList"" : [
+															{
+																""Criteria"" : {
+																	""VisitOccurrence"" : {
+																		""CodesetId"" : 4,
+																		""VisitTypeExclude"" : false
+																	}
+																},
+																""StartWindow"" : {
+																	""Start"" : {
+																		""Coeff"" : -1
+																	},
+																	""End"" : {
+																		""Days"" : 0,
+																		""Coeff"" : 1
+																	},
+																	""UseIndexEnd"" : false,
+																	""UseEventEnd"" : false
+																},
+																""EndWindow"" : {
+																	""Start"" : {
+																		""Days"" : 0,
+																		""Coeff"" : -1
+																	},
+																	""End"" : {
+																		""Coeff"" : 1
+																	},
+																	""UseIndexEnd"" : false,
+																	""UseEventEnd"" : true
+																},
+																""RestrictVisit"" : false,
+																""IgnoreObservationPeriod"" : false,
+																""Occurrence"" : {
+																	""Type"" : 2,
+																	""Count"" : 1,
+																	""IsDistinct"" : false
+																}
+															}
+														],
+														""DemographicCriteriaList"" : [],
+														""Groups"" : []
+													},
+													""ConditionSourceConcept"" : 0
+												}
+											},
+											""StartWindow"" : {
+												""Start"" : {
+													""Days"" : 1,
+													""Coeff"" : 1
+												},
+												""End"" : {
+													""Days"" : 183,
+													""Coeff"" : 1
+												},
+												""UseIndexEnd"" : false,
+												""UseEventEnd"" : false
+											},
+											""RestrictVisit"" : false,
+											""IgnoreObservationPeriod"" : false,
+											""Occurrence"" : {
+												""Type"" : 2,
+												""Count"" : 1,
+												""IsDistinct"" : false
+											}
+										}
+									],
+									""DemographicCriteriaList"" : [],
+									""Groups"" : []
+								},
+								""CodesetId"" : 3,
+								""VisitTypeExclude"" : false
+							}
+						},
+						""StartWindow"" : {
+							""Start"" : {
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Days"" : 0,
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : false
+						},
+						""EndWindow"" : {
+							""Start"" : {
+								""Days"" : 0,
+								""Coeff"" : -1
+							},
+							""End"" : {
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : true
+						},
+						""RestrictVisit"" : false,
+						""IgnoreObservationPeriod"" : false,
+						""Occurrence"" : {
+							""Type"" : 2,
+							""Count"" : 1,
+							""IsDistinct"" : false
+						}
+					}
+				],
+				""DemographicCriteriaList"" : [],
+				""Groups"" : []
+			}
+		}
+	],
+	""EndStrategy"" : {
+		""DateOffset"" : {
+			""DateField"" : ""StartDate"",
+			""Offset"" : 1460
+		}
+	},
+	""CensoringCriteria"" : [],
+	""CollapseSettings"" : {
+		""CollapseType"" : ""ERA"",
+		""EraPad"" : 0
+	},
+	""CensorWindow"" : {}
+}",,FALSE,TRUE
 15526,15526,[PhePheb] Alzheimers disease per Riedel 2022 v2,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
